@@ -1,7 +1,9 @@
+# encoding: utf-8
 require 'json'
 require 'time'
 require 'uri'
 MAX_PLACEHOLDER = Time.now + (60*60*24*7)
+CACHE_TTL = 10
 
 def item_xml(options = {})
   <<-ITEM
@@ -13,28 +15,12 @@ def item_xml(options = {})
   ITEM
 end
 
-js_str =<<JS
-of = Library('OmniFocus')
-tasks = of.allTasks()
-names = []
-tasks.forEach(function(e){
-  var ctx = (e.context() ? e.context.name() : null)
-  var obj = {
-    id: e.id(),
-    name: e.name(),
-    context: ctx,
-    deferDate: e.deferDate(),
-    dueDate: e.dueDate(),
-    note: e.note(),
-  }
-  names.push(obj)
-})
-JSON.stringify(names)
-JS
-
-j = ''
-IO.popen("osascript -l JavaScript -e \"#{js_str}\" ", external_encoding: 'UTF-8'){|io| j = io.read }
-j = JSON.parse(j).map{|e|
+cache_filename = "./cache/#{Time.now.to_i/CACHE_TTL}.json"
+unless File.exist?(cache_filename)
+  File.unlink *Dir.glob("./cache/*.json")
+  system("osascript -l JavaScript omni_list.scpt > #{cache_filename}")
+end
+j = JSON.parse(open(cache_filename, external_encoding: 'UTF-8').read).map{|e|
   e.merge!({
     'dueDate' => (e['dueDate'] ? Time.parse(e['dueDate']) : nil),
     'deferDate' => (e['deferDate'] ? Time.parse(e['deferDate']) : nil)
@@ -47,9 +33,9 @@ def match?(word, query)
   word.match(/#{query}/i)
 end
 
-queries = ARGV.first.split(' ').map{|e| Regexp.escape(e) }
+queries = ARGV.first.dup.force_encoding('UTF-8').split(' ').map{|e| Regexp.escape(e) }
 
-matches = list
+matches = list.select{|e| e['status'] == true }
 queries.each do |query|
   matches = matches.select { |e| match?(e['name'], query) }
 end
@@ -57,6 +43,8 @@ end
 def fmt_time(t)
   t.strftime("%m/%d %R")
 end
+
+matches = [{'name' => '(nothing...)'}] if matches.size == 0
 
 items = matches.map do |elem|
   sub = ''
