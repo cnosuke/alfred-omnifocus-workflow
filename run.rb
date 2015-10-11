@@ -3,7 +3,7 @@ require 'json'
 require 'time'
 require 'uri'
 MAX_PLACEHOLDER = Time.now + (60*60*24*7)
-CACHE_TTL = 10
+CACHE_TTL = 20
 
 def item_xml(options = {})
   <<-ITEM
@@ -30,6 +30,7 @@ j = JSON.parse(open(cache_filename, external_encoding: 'UTF-8').read).map{|e|
 list = j.sort_by{|e| (e['dueDate'] ? e['dueDate'] : MAX_PLACEHOLDER ) }
 
 def match?(word, query)
+  return false unless word
   word.match(/#{query}/i)
 end
 
@@ -37,7 +38,13 @@ queries = ARGV.first.dup.force_encoding('UTF-8').split(' ').map{|e| Regexp.escap
 
 matches = list.select{|e| e['status'] == true }
 queries.each do |query|
-  matches = matches.select { |e| match?(e['name'], query) }
+  matches = matches.select do |e|
+    [
+      match?(e['name'], query),
+      match?(e['context'], query),
+      match?(e['note'], query)
+    ].any?
+  end
 end
 
 def fmt_time(t)
