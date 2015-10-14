@@ -76,7 +76,6 @@ names = [];
 tasks.forEach(function(e){
   var ctx = (e.context() ? e.context.name() : null);
   var prj = getProjectNameById(e.container().id());
-  var prjStatus = getProjectStatusById(e.container().id());
   var obj = {
     id: e.id(),
     name: e.name(),
